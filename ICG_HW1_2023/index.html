@@ -1,0 +1,543 @@
+<html>
+
+<head>
+<title>ICG HW1</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<script type="text/javascript" src="./js/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="./js/webgl-utils.js"></script>
+<script type="text/javascript" src="./js/utils.js"></script>
+<link rel="stylesheet" type="text/css" href="./js/css_style.css">
+
+<!-- 
+bonus to do 
+1. sensitivity of translation/rotation speed: update_trans - add a scalar mult to the tx,ty,tz
+2. use mouse cursor to make translation/rotation: press and drag makes translation, hover makes it rotate. 
+-->
+
+
+<!-- 
+    TODO HERE: 
+    modify fragment shader or write another one
+    to implement flat, gouraud and phong shading
+ -->
+<script id="fragmentShader" type="fragment">
+    #extension GL_OES_standard_derivatives : enable 
+
+    precision mediump float;
+
+    varying vec3 shading_mode;
+    varying vec3 vertexColor;
+    varying vec3 fragPosition;
+    varying vec3 fragNormal;
+    varying vec3 lightLocations[3];
+    varying vec3 lightColors[3];
+    varying vec3 lightKdKsCDs[3];
+    varying float Ka_val;
+    varying vec3 ambient_lightColor;
+
+    varying vec4 fragcolor;   // for gouraud shading
+
+    void main(void) {
+        if(shading_mode[0] == 1.){                      // gouraud shading;
+            gl_FragColor = fragcolor;
+        }
+        else if (shading_mode[0] == 2.){
+            // gl_FragColor = 
+        }
+    }
+</script>
+
+<!-- 
+    TODO HERE:
+    modify vertex shader or write another one
+    to implement flat, gouraud and phong shading
+
+    NOTE:
+    if you want to write bonus part (texture mapping),
+    only Teapot.json has extra attribute "vertexTextureCoords"
+    which is used for texture mappping.
+ -->
+<script id="vertexShader" type="vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec3 aFrontColor;
+    attribute vec3 aVertexNormal;
+
+    uniform vec3 lightLoc[3];
+    uniform vec3 lightColor[3];
+    uniform vec3 lightKdKsCD[3];
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    uniform float Ka;
+    uniform vec3 ambient_color;
+    
+    uniform int mode;
+    uniform float volume;
+
+    varying vec3 vertexColor;
+    varying vec3 fragPosition;
+    varying vec3 fragNormal;
+    varying vec3 shading_mode;
+    varying vec3 lightLocations[3];
+    varying vec3 lightColors[3];
+    varying vec3 lightKdKsCDs[3];
+    varying float Ka_val;
+    varying vec3 ambient_lightColor;
+
+    varying vec4 fragcolor;
+
+    void main(void) {
+        Ka_val = Ka;
+        ambient_lightColor = ambient_color;
+        for(int i=0; i<3 ; ++i){
+            lightLocations[i] = lightLoc[i];
+            lightColors[i] = lightColor[i];
+            lightKdKsCDs[i] = lightKdKsCD[i];
+        }
+        
+        shading_mode = vec3(mode);
+
+        vec3 vertex_copy = aVertexPosition;
+        vertex_copy.x *= 1.+volume;
+        vertex_copy.y *= 1.+volume;
+        vertex_copy.z *= 1.+volume;
+
+        if(mode == 1){  // phong   
+            vec3 phong = vec3(0., 0., 0.);
+            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
+
+            float ka = Ka; 
+            vec3 V = -normalize(mvVertex);
+            vec3 N = normalize(mvNormal);
+            vec3 ambient = ka * ambient_color;
+
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
+
+                vec3 L = normalize(lightLoc[i] - mvVertex);
+                vec3 H = normalize(L+V);
+
+                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
+                vec3 diffuse = kd * Id;
+    
+                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
+                vec3 specular = ks * Is;
+    
+                if(dot(L, N) < 0.){
+                    specular = vec3(0., 0., 0.);
+                }
+                phong += aFrontColor * (ambient + diffuse) + specular;
+
+            }
+            fragcolor = vec4(phong, 1.0);
+        }
+
+        if(mode == 1){  // flat   
+            vec3 phong = vec3(0., 0., 0.);
+            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
+
+            float ka = Ka; 
+            vec3 V = -normalize(mvVertex);
+            vec3 N = normalize(mvNormal);
+            vec3 ambient = ka * ambient_color;
+
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
+
+                vec3 L = normalize(lightLoc[i] - mvVertex);
+                vec3 H = normalize(L+V);
+
+                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
+                //vec3 Id = lightColor[i];
+                vec3 diffuse = kd * Id;
+    
+                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
+                vec3 specular = ks * Is;
+    
+                if(dot(L, N) < 0.){
+                    specular = vec3(0., 0., 0.);
+                }
+                phong += aFrontColor * (ambient + diffuse);
+
+            }
+            fragcolor = vec4(phong, 1.0);
+        }
+
+        gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
+        
+    }
+
+
+</script>
+
+<script type="text/javascript">
+    // common variables
+    var gl;
+    var shaderProgram;
+    var analyser;
+    var frequencyData = new Uint8Array();
+    // rendering method
+    var mode = 1;
+    // modeling and perspective matrixs
+    var mvMatrix = mat4.create();
+    var pMatrix  = mat4.create();
+    // object parameters
+    var obj_names = ["Teapot.json"];
+    // var obj_names = ["./model/Teapot.json"];
+    var obj_vec = [];
+    var obj_default_trans = [vec3.create([0., 0., -15.]), vec3.create([15., 0., -37.]),  vec3.create([-15., -1., -37.])];
+    var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-90., 0., -50.]), vec3.create([-90., 0., -50.])];
+    var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([2., 2., 2.]), vec3.create([5., 5., 5.])];
+    var obj_default_shear = vec3.create([90., 90., 90.]);
+    // light parameters
+    var light_locations = new Float32Array([0., 5., -10., 17., 5., -17., -17., 5., -17.]);
+    var light_colors = new Float32Array([1., 0.0, 0.0, 0., 1., 0., 0., 0., 1.])
+    var light_kdkscd = new Float32Array([0.6, 0.3, 20.0, 0.6, 0.3, 20.0, 0.6, 0.3, 20.0]);
+    var ka = 0.1;
+    var ambiet_light_color = vec3.create([1., 1., 1.]);
+    // animation controls
+    var rotate_flag = false;
+    var lastTime = 0;
+    var random_light_flag = false;
+    var transparent = 1.0;
+
+
+    //*************************************************
+    // Initialization functions
+    //*************************************************
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            gl.getExtension('OES_standard_derivatives');
+            gl.viewportWidth  = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } 
+        catch (e) {
+        }
+
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var shaderSource = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                shaderSource += k.textContent;
+            }
+
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } 
+        else if (shaderScript.type == "vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } 
+        else {
+            return null;
+        }
+
+        gl.shaderSource(shader, shaderSource);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "fragmentShader");
+        var vertexShader   = getShader(gl, "vertexShader");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+        shaderProgram.vertexFrontColorAttribute = gl.getAttribLocation(shaderProgram, "aFrontColor");
+        gl.enableVertexAttribArray(shaderProgram.vertexFrontColorAttribute);
+        shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+        gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+
+        shaderProgram.pMatrixUniform  = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "mode"), mode);
+
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightLoc"), light_locations);
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightColor"), light_colors);
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightKdKsCD"), light_kdkscd);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "Ka"), ka);
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "ambient_color"), ambiet_light_color);
+        
+        var context = new AudioContext();
+        var audio = document.getElementById('myAudio');
+        var audioSrc = context.createMediaElementSource(audio);
+        var sourceJs = context.createScriptProcessor(2048); 
+
+        analyser = context.createAnalyser();
+        analyser.smoothingTimeConstant = 0.6;
+        analyser.fftSize = 512;
+ 
+        audioSrc.connect(analyser);
+        analyser.connect(sourceJs);
+        sourceJs.buffer = audioSrc.buffer;
+        sourceJs.connect(context.destination);
+        audioSrc.connect(context.destination);
+
+        sourceJs.onaudioprocess = function(e) {
+            frequencyData = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(frequencyData);
+        };
+        
+        audio.play();
+        gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), 0.);
+    }
+
+    function setMatrixUniforms(obj) {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, obj.pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, obj.mvMatrix);
+    }
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+
+    function handleLoaded(obj, objData) {
+        obj.VertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.VertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(objData.vertexPositions), gl.STATIC_DRAW);
+        obj.VertexPositionBuffer.itemSize = 3;
+        obj.VertexPositionBuffer.numItems = objData.vertexPositions.length / 3;
+
+        obj.VertexNormalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.VertexNormalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(objData.vertexNormals), gl.STATIC_DRAW);
+        obj.VertexNormalBuffer.itemSize = 3;
+        obj.VertexNormalBuffer.numItems = objData.vertexNormals.length / 3;
+
+        obj.VertexFrontColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, obj.VertexFrontColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(objData.vertexFrontcolors), gl.STATIC_DRAW);
+        obj.VertexFrontColorBuffer.itemSize = 3;
+        obj.VertexFrontColorBuffer.numItems = objData.vertexFrontcolors.length / 3;
+    }
+
+    function loadObj(obj) {
+        var request = new XMLHttpRequest();
+        // request.responseType = "json";
+        // console.log(obj)
+        request.open("GET", "./model/"+obj.name);
+        request.onreadystatechange = function () {
+            if (request.readyState == 4) {
+                handleLoaded(obj, JSON.parse(request.responseText));
+                // handleLoaded(obj, request.response);
+            }
+        }
+        request.send();
+    }
+
+    //*************************************************
+    // Rendering functions
+    //*************************************************
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clearColor(ka*ambiet_light_color[0], ka*ambiet_light_color[1], ka*ambiet_light_color[2], transparent);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        for(var i=0 ; i<3 ; ++i)
+        {
+
+            if (obj_vec[i].VertexPositionBuffer == null ||  obj_vec[i].VertexNormalBuffer == null || obj_vec[i].VertexFrontColorBuffer == null) {
+                continue;
+            }
+
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, obj_vec[i].pMatrix);
+            mat4.identity(obj_vec[i].mvMatrix);
+
+            obj_vec[i].translation();
+            obj_vec[i].rotation();
+            obj_vec[i].scale();
+            obj_vec[i].shear();
+            setMatrixUniforms(obj_vec[i]);
+
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, obj_vec[i].VertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, obj_vec[i].VertexPositionBuffer.itemSize,  gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, obj_vec[i].VertexFrontColorBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexFrontColorAttribute, obj_vec[i].VertexFrontColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, obj_vec[i].VertexNormalBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, obj_vec[i].VertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightLoc"), light_locations);
+            gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightColor"), light_colors);
+            gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightKdKsCD"), light_kdkscd);
+            gl.uniform1f(gl.getUniformLocation(shaderProgram, "Ka"), ka);
+            gl.uniform3fv(gl.getUniformLocation(shaderProgram, "ambient_color"), ambiet_light_color);
+
+            gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), frequencyData[Math.floor(256 / 7) * i] / 625 );
+            gl.drawArrays(gl.TRIANGLES, 0, obj_vec[i].VertexPositionBuffer.numItems);
+        }
+    }
+
+    function tick() {
+        requestAnimFrame(tick);
+        drawScene();
+
+        analyser.getByteFrequencyData(frequencyData);
+        
+        if(rotate_flag){
+            rotate_objects();
+        }
+
+        if(random_light_flag){
+            random_light();
+        }
+        
+    }
+
+    function webGLStart() {
+        var canvas = document.getElementById("ICG-canvas");
+        initGL(canvas);
+        initShaders();
+
+        // modify to 1 object only
+        for(var i=0 ; i<3 ; i+=1){
+            obj_vec.push( new CGObject(i, obj_names[i], obj_default_trans[i], obj_default_rotate[i], obj_default_scale[i], obj_default_shear) );
+            loadObj(obj_vec[i]);
+        }
+
+        gl.clearColor(ka*ambiet_light_color[0], ka*ambiet_light_color[1], ka*ambiet_light_color[2], transparent);
+        gl.enable(gl.DEPTH_TEST);
+
+        tick();
+    }
+
+    //*************************************************
+    // Parsing parameters
+    //*************************************************
+    function update_mode(){
+        mode = document.getElementById("shading").value;
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "mode"), mode);
+    }
+
+    function update_ambient_light(paramid){
+        if(paramid == 0) ka = document.getElementById("am_ka").value;
+        else
+        {
+            ambiet_light_color[0] = document.getElementById("am_lR").value;
+            ambiet_light_color[1] = document.getElementById("am_lG").value;
+            ambiet_light_color[2] = document.getElementById("am_lB").value;
+        }
+    }
+
+    function update_light_location(lightid){
+        light_locations[lightid * 3] = document.getElementById(lightid + "_llocX").value;
+        light_locations[lightid * 3 + 1] = document.getElementById(lightid + "_llocY").value;
+        light_locations[lightid * 3 + 2] = document.getElementById(lightid + "_llocZ").value;
+    }
+
+    function update_light_color(lightid){
+        light_colors[lightid * 3] = document.getElementById(lightid + "_lR").value;
+        light_colors[lightid * 3 + 1] = document.getElementById(lightid + "_lG").value;
+        light_colors[lightid * 3 + 2] = document.getElementById(lightid + "_lB").value;
+    }
+    
+    function update_trans(objid){
+        var tx = document.getElementById(objid + "_transX").value;
+        var ty = document.getElementById(objid + "_transY").value;
+        var tz = document.getElementById(objid + "_transZ").value;
+        obj_vec[objid].translation_vec = vec3.create([tx, ty, tz]);
+    }
+
+    function update_rotate(objid){
+        var rx = document.getElementById(objid + "_rotateX").value;
+        var ry = document.getElementById(objid + "_rotateY").value;
+        var rz = document.getElementById(objid + "_rotateZ").value;
+        obj_vec[objid].rotate_vec = vec3.create([rx, ry, rz]);
+    }
+    
+</script>
+</head>
+
+<body onload="webGLStart();">
+    <audio style="position: absolute; right: 4%; bottom: 30%; z-index: 2;" id="myAudio"></audio>
+
+    <p style="position: absolute; right: 2%; top:6%; ">
+        <canvas id="ICG-canvas" style="border: none;" width="1060" height="590" ></canvas>
+    </p>
+
+    <p style="position: absolute; left: 1%; top: 1%; max-width: 30%; min-width: 30%; ">
+
+        <p>
+            <label for="shading">Gouraud shading</label>
+        </p>
+
+        </br>
+        <span>Ambient Light</span>
+        <table>
+            <tr>
+                <td>Ka: <input style="max-width: 70%; vertical-align: middle;" id="am_ka" type="range" autocomplete="off" value="0.1" max="1." min="0." step="0.05" oninput="update_ambient_light(0)"></td>
+            </tr>
+        </table>
+        </br>
+        <span>Light 0</span>
+        <table>
+            <tr>
+                <td>X: <input style="max-width: 70%; vertical-align: middle;" id="0_llocX" type="range" autocomplete="off" value="0." max="20." min="-20." oninput="update_light_location(0)"></td>
+                <td>Y: <input style="max-width: 70%; vertical-align: middle;" id="0_llocY" type="range" autocomplete="off" value="5." max="20." min="-20." oninput="update_light_location(0)"></td>
+                <td>Z: <input style="max-width: 70%; vertical-align: middle;" id="0_llocZ" type="range" autocomplete="off" value="-10." max="0." min="-75." oninput="update_light_location(0)"></td>
+            </tr>
+        </table>
+        </br>
+        </br>
+        </br>
+
+        <span>Object</span>
+        <table>
+            <tr>
+            <th></th>
+            <th>X axis</th>
+            <th>Y axis</th>
+            <th>Z axis</th>
+            </tr>
+            <tr>
+                <td>Trans.</td>
+                <td><input id="0_transX" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
+                <td><input id="0_transY" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
+                <td><input id="0_transZ" type="range" autocomplete="off" value="-15." max="0." min="-120." oninput="update_trans(0)"></td>
+            </tr>
+            <tr>
+                <td>Rotate</td>
+                <td><input id="0_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+                <td><input id="0_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+                <td><input id="0_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+            </tr>
+        </table>
+    </p>
+</body>
+</html>
