@@ -26,28 +26,104 @@ bonus to do
 
     precision mediump float;
 
+    varying vec3 lightLocations[3];
+    varying vec3 lightColors[3];
+    varying vec3 lightKdKsCDs[3];
+
+    varying vec3 ambient_lightColor;
+
+    varying float Ka_val;
+    varying vec4 fragcolor; 
+
     varying vec3 shading_mode;
     varying vec3 vertexColor;
     varying vec3 fragPosition;
     varying vec3 fragNormal;
-    varying vec3 lightLocations[3];
-    varying vec3 lightColors[3];
-    varying vec3 lightKdKsCDs[3];
-    varying float Ka_val;
-    varying vec3 ambient_lightColor;
     
-    varying vec4 fragcolor;   // for gouraud shading
-
+    varying vec3 mvNormal;
+    varying vec3 mvVertex;
 
     void main(void) {
-        if(shading_mode[0] == 1.){                      // gouraud shading;
+        /* ------ gouraud shading ------ */
+        if(shading_mode[0] == 1.){                     
             gl_FragColor = fragcolor;
         }
-        else if (shading_mode[0] == 2.){                // phong shading
-            gl_FragColor = fragcolor;
+        
+        /* ------ phong shading ------ */
+        else if (shading_mode[0] == 2.){                          
+            /* ambient */
+            float ka = Ka_val; 
+            vec3 ambient = ka * ambient_lightColor * vec3(fragcolor);
+            vec3 phong = ambient;
+            
+            vec3 eyedir = normalize(-mvVertex); // for specular
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCDs[i][0];
+                float ks = lightKdKsCDs[i][1];
+                float CosineDegree = lightKdKsCDs[i][2];
+                
+                /*
+                float kd = 0.1;
+                float ks = 0.1;
+                float CosineDegree = 1.0;
+                */
+
+                /* diffuse */
+                vec3 lightdir = normalize(lightLocations[i] - mvVertex);
+                //float diffuse_cos = max(dot(mvNormal, lightdir), 0.);
+                float diffuse_cos = 0.5;
+                vec3 diffuse_color = lightColors[i] * kd * vec3(fragcolor) * diffuse_cos;
+                //vec3 diffuse_color = 1.0 * kd * vec3(fragcolor) * diffuse_cos;
+                phong += diffuse_color;
+
+                /* specular */
+                vec3 reflectiondir = reflect(-lightdir, mvNormal);
+                float specular_cos_n = pow(max(dot(reflectiondir, eyedir), 0.), CosineDegree);
+                //float specular_cos_n = 0.5;
+                vec3 specular_color = ks * lightColors[i] * specular_cos_n;
+                phong += specular_color;
+
+            }
+            gl_FragColor = vec4(phong, 1.0);
         }
-        else if (shading_mode[0] == 3.){                // flat shading
-            gl_FragColor = fragcolor;
+        
+        /* ------ flat shading ------ */
+        else if (shading_mode[0] == 3.){              
+            /* ambient */
+            float ka = Ka_val; 
+            vec3 ambient = ka * ambient_lightColor * vec3(fragcolor);
+            vec3 flat_shading = ambient;
+
+            vec3 dx = dFdx(mvVertex);
+            vec3 dy = dFdy(mvVertex);
+            vec3 normal = normalize(cross(dx,dy));
+
+            vec3 eyedir = normalize(-mvVertex); // for specular
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCDs[i][0];
+                float ks = lightKdKsCDs[i][1];
+                float CosineDegree = lightKdKsCDs[i][2];
+                
+                /*
+                float kd = 0.1;
+                float ks = 0.1;
+                float CosineDegree = 1.0;
+                */
+
+                /* diffuse */
+                vec3 lightdir = normalize(lightLocations[i] - mvVertex);
+                float diffuse_cos = max(dot(normal, lightdir), 0.);
+                vec3 diffuse_color = lightColors[i] * kd * vec3(fragcolor) * diffuse_cos;
+                flat_shading += diffuse_color;
+
+                /* specular */
+                vec3 reflectiondir = reflect(-lightdir, normal);
+                float specular_cos_n = pow(max(dot(reflectiondir, eyedir), 0.), CosineDegree);
+                vec3 specular_color = ks * lightColors[i] * specular_cos_n;
+                flat_shading += specular_color;
+
+            }
+            gl_FragColor = vec4(flat_shading, 1.0);
         }
     }
 </script>
@@ -90,10 +166,14 @@ bonus to do
 
     varying vec4 fragcolor;
 
+    varying vec3 mvVertex;
+    varying vec3 mvNormal;
+
     void main(void) {
         Ka_val = Ka;
         ambient_lightColor = ambient_color; // = Ia * Obj(r,g,b) = Ia * aFrontColor
         
+        /* these are for fragment shaders */
         for(int i=0; i<3 ; ++i){
             lightLocations[i] = lightLoc[i];
             lightColors[i] = lightColor[i];
@@ -108,40 +188,7 @@ bonus to do
         vertex_copy.z *= 1.+volume;
 
         if(mode == 1){  // gouraud   
-            vec3 gouroud = vec3(0., 0., 0.);
-            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz; 
-            vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
-
-            float ka = Ka; 
-            vec3 V = -normalize(mvVertex);
-            vec3 N = normalize(mvNormal);
-            vec3 ambient = ka * ambient_color;
-
-            for(int i=0 ; i<3 ; ++i){
-                float kd = lightKdKsCD[i][0];
-                float ks = lightKdKsCD[i][1];
-                float CosineDegree = lightKdKsCD[i][2];
-
-                vec3 L = normalize(lightLoc[i] - mvVertex);
-                vec3 H = normalize(L+V);
-
-                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
-                vec3 diffuse = kd * Id;
-
-                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
-                vec3 specular = ks * Is;
-                if(dot(L, N) < 0.){
-                    specular = vec3(0., 0., 0.);
-                }
-
-                gouroud += aFrontColor * (ambient + diffuse + specular);
-            }
-            fragcolor = vec4(gouroud, 1.0);
-            gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
-        }
-
-        if(mode == 2) { // phong
-            vec3 phong = vec3(0., 0., 0.);
+            vec3 gouraud = vec3(0., 0., 0.);
             vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
             vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
 
@@ -161,22 +208,56 @@ bonus to do
     
                 vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
                 vec3 specular = ks * Is;
-                if(dot(L, N) < 0.){
-                    specular = vec3(0., 0., 0.);
-                }
 
-                phong += aFrontColor * (ambient + diffuse + specular);
+                gouraud += aFrontColor * (ambient + diffuse) + specular;
+
             }
-            fragcolor = vec4(phong, 1.0);
-            gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
+            fragcolor = vec4(gouraud, 1.0);
+        }
+
+        if(mode == 2) { // phong
+            //vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            vec3 mvNormal = normalize(mat3(uMVMatrix) * aVertexNormal);
+            //fragcolor = vec4(aFrontColor, 1.0);
+
+            vec3 gouraud = vec3(0., 0., 0.);
+            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            //vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
+            
+            //fragcolor = vec4(aFrontColor.rgb, 1.0);
+            ///*
+            float ka = Ka; 
+            vec3 V = -normalize(mvVertex);
+            vec3 N = normalize(mvNormal);
+            vec3 ambient = ka * ambient_color;
+
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
+
+                vec3 L = normalize(lightLoc[i] - mvVertex);
+                vec3 H = normalize(L+V);
+
+                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
+                vec3 diffuse = kd * Id;
+    
+                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
+                vec3 specular = ks * Is;
+
+                gouraud += aFrontColor * (ambient + diffuse) + specular;
+
+            }
+            fragcolor = vec4(gouraud, 1.0);
+            //*/
+
         }
 
         if(mode == 3) {  // flat   
             vec3 mvVertex = (uMVMatrix * vec4(aVertexPosition,1.0)).xyz;
-            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
             fragcolor = vec4(aFrontColor.rgb, 1.0);
         }
-        
+
+
+        gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
     }
 
 
@@ -215,7 +296,7 @@ bonus to do
     */                                         
     var light_colors = new Float32Array([0., 1., 0.,  // [r,g,b]
                                          1., 1., 1., 
-                                         1., 1., 1.])                                          
+                                         0., 0., 1.])                                          
     var light_kdkscd = new Float32Array([0.6, 0.5, 20.0, // [kd,ks,cosineDegree]
                                          0.6, 0.5, 20.0, 
                                          0.6, 0.5, 20.0]); 
