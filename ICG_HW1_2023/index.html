@@ -35,15 +35,19 @@ bonus to do
     varying vec3 lightKdKsCDs[3];
     varying float Ka_val;
     varying vec3 ambient_lightColor;
-
+    
     varying vec4 fragcolor;   // for gouraud shading
+
 
     void main(void) {
         if(shading_mode[0] == 1.){                      // gouraud shading;
             gl_FragColor = fragcolor;
         }
-        else if (shading_mode[0] == 2.){
-            // gl_FragColor = 
+        else if (shading_mode[0] == 2.){                // phong shading
+            gl_FragColor = fragcolor;
+        }
+        else if (shading_mode[0] == 3.){                // flat shading
+            gl_FragColor = fragcolor;
         }
     }
 </script>
@@ -88,7 +92,8 @@ bonus to do
 
     void main(void) {
         Ka_val = Ka;
-        ambient_lightColor = ambient_color;
+        ambient_lightColor = ambient_color; // = Ia * Obj(r,g,b) = Ia * aFrontColor
+        
         for(int i=0; i<3 ; ++i){
             lightLocations[i] = lightLoc[i];
             lightColors[i] = lightColor[i];
@@ -102,7 +107,40 @@ bonus to do
         vertex_copy.y *= 1.+volume;
         vertex_copy.z *= 1.+volume;
 
-        if(mode == 1){  // phong   
+        if(mode == 1){  // gouraud   
+            vec3 gouroud = vec3(0., 0., 0.);
+            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz; 
+            vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
+
+            float ka = Ka; 
+            vec3 V = -normalize(mvVertex);
+            vec3 N = normalize(mvNormal);
+            vec3 ambient = ka * ambient_color;
+
+            for(int i=0 ; i<3 ; ++i){
+                float kd = lightKdKsCD[i][0];
+                float ks = lightKdKsCD[i][1];
+                float CosineDegree = lightKdKsCD[i][2];
+
+                vec3 L = normalize(lightLoc[i] - mvVertex);
+                vec3 H = normalize(L+V);
+
+                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
+                vec3 diffuse = kd * Id;
+
+                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
+                vec3 specular = ks * Is;
+                if(dot(L, N) < 0.){
+                    specular = vec3(0., 0., 0.);
+                }
+
+                gouroud += aFrontColor * (ambient + diffuse + specular);
+            }
+            fragcolor = vec4(gouroud, 1.0);
+            gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
+        }
+
+        if(mode == 2) { // phong
             vec3 phong = vec3(0., 0., 0.);
             vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
             vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
@@ -123,49 +161,21 @@ bonus to do
     
                 vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
                 vec3 specular = ks * Is;
-    
                 if(dot(L, N) < 0.){
                     specular = vec3(0., 0., 0.);
                 }
-                phong += aFrontColor * (ambient + diffuse) + specular;
 
+                phong += aFrontColor * (ambient + diffuse + specular);
             }
             fragcolor = vec4(phong, 1.0);
+            gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
         }
 
-        if(mode == 1){  // flat   
-            vec3 phong = vec3(0., 0., 0.);
-            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
-            vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
-
-            float ka = Ka; 
-            vec3 V = -normalize(mvVertex);
-            vec3 N = normalize(mvNormal);
-            vec3 ambient = ka * ambient_color;
-
-            for(int i=0 ; i<3 ; ++i){
-                float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
-
-                vec3 L = normalize(lightLoc[i] - mvVertex);
-                vec3 H = normalize(L+V);
-
-                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
-                //vec3 Id = lightColor[i];
-                vec3 diffuse = kd * Id;
-    
-                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
-                vec3 specular = ks * Is;
-    
-                if(dot(L, N) < 0.){
-                    specular = vec3(0., 0., 0.);
-                }
-                phong += aFrontColor * (ambient + diffuse);
-
-            }
-            fragcolor = vec4(phong, 1.0);
+        if(mode == 3) {  // flat   
+            vec3 mvVertex = (uMVMatrix * vec4(aVertexPosition,1.0)).xyz;
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            fragcolor = vec4(aFrontColor.rgb, 1.0);
         }
-
-        gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
         
     }
 
@@ -179,7 +189,7 @@ bonus to do
     var analyser;
     var frequencyData = new Uint8Array();
     // rendering method
-    var mode = 1;
+    var mode = 1; // 1: gouraud, 2: phong, 3: flat
     // modeling and perspective matrixs
     var mvMatrix = mat4.create();
     var pMatrix  = mat4.create();
@@ -192,9 +202,23 @@ bonus to do
     var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([2., 2., 2.]), vec3.create([5., 5., 5.])];
     var obj_default_shear = vec3.create([90., 90., 90.]);
     // light parameters
-    var light_locations = new Float32Array([0., 5., -10., 17., 5., -17., -17., 5., -17.]);
-    var light_colors = new Float32Array([1., 0.0, 0.0, 0., 1., 0., 0., 0., 1.])
-    var light_kdkscd = new Float32Array([0.6, 0.3, 20.0, 0.6, 0.3, 20.0, 0.6, 0.3, 20.0]);
+    /*
+    there are 3 lights, where the parameter are given as 3 sets.
+    */
+    var light_locations = new Float32Array([0., 5., -10., // [x,y,z]
+                                            17., 5., -17., 
+                                            -17., 5., -17.]);
+    /*                                            
+    var light_colors = new Float32Array([1., 0.0, 0.0,  // [r,g,b]
+                                         0., 1., 0., 
+                                         0., 0., 1.]) 
+    */                                         
+    var light_colors = new Float32Array([0., 1., 0.,  // [r,g,b]
+                                         1., 1., 1., 
+                                         1., 1., 1.])                                          
+    var light_kdkscd = new Float32Array([0.6, 0.5, 20.0, // [kd,ks,cosineDegree]
+                                         0.6, 0.5, 20.0, 
+                                         0.6, 0.5, 20.0]); 
     var ka = 0.1;
     var ambiet_light_color = vec3.create([1., 1., 1.]);
     // animation controls
@@ -347,13 +371,10 @@ bonus to do
 
     function loadObj(obj) {
         var request = new XMLHttpRequest();
-        // request.responseType = "json";
-        // console.log(obj)
         request.open("GET", "./model/"+obj.name);
         request.onreadystatechange = function () {
             if (request.readyState == 4) {
                 handleLoaded(obj, JSON.parse(request.responseText));
-                // handleLoaded(obj, request.response);
             }
         }
         request.send();
@@ -441,7 +462,7 @@ bonus to do
     // Parsing parameters
     //*************************************************
     function update_mode(){
-        mode = document.getElementById("shading").value;
+        mode = parseInt(document.querySelector('input[name="shadingS"]:checked').value);
         gl.uniform1i(gl.getUniformLocation(shaderProgram, "mode"), mode);
     }
 
@@ -493,9 +514,18 @@ bonus to do
 
     <p style="position: absolute; left: 1%; top: 1%; max-width: 30%; min-width: 30%; ">
 
-        <p>
-            <label for="shading">Gouraud shading</label>
-        </p>
+
+        <form action="#n">
+            <label for="shading">Shading mode: </label> <br>
+
+            <input type="radio" name="shadingS" value="1" checked> Gouraud <br>
+
+            <input type="radio" name="shadingS" value="2"> Phone <br>
+
+            <input type="radio" name="shadingS" value="3"> Flat <br>
+
+            <a href="javascript: update_mode()">Apply</A>
+        </form>
 
         </br>
         <span>Ambient Light</span>
