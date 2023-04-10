@@ -8,113 +8,135 @@
 <script type="text/javascript" src="./js/webgl-utils.js"></script>
 <script type="text/javascript" src="./js/utils.js"></script>
 <link rel="stylesheet" type="text/css" href="./js/css_style.css">
-
-<!-- 
-bonus to do 
-1. sensitivity of translation/rotation speed: update_trans - add a scalar mult to the tx,ty,tz
-2. use mouse cursor to make translation/rotation: press and drag makes translation, hover makes it rotate. 
--->
-
-
 <!-- 
     TODO HERE: 
     modify fragment shader or write another one
     to implement flat, gouraud and phong shading
  -->
-<script id="fragmentShader" type="x-shader/x-fragment">    
+<script id="fragmentShader" type="x-shader/x-fragment">
     #extension GL_OES_standard_derivatives : enable 
 
     precision mediump float;
-
-    varying vec3 lightLocations[3];
-    varying vec3 lightColors[3];
-    varying vec3 lightKdKsCDs[3];
-
-    varying vec3 ambient_lightColor;
-
-    varying float Ka_val;
-    varying vec4 fragcolor; 
 
     varying vec3 shading_mode;
     varying vec3 vertexColor;
     varying vec3 fragPosition;
     varying vec3 fragNormal;
+    varying vec3 lightLocations[3];
+    varying vec3 lightColors[3];
+    varying vec3 lightKdKsCDs[3];
+    varying float Ka_val;
+    varying vec3 ambient_lightColor;
+
+    varying vec4 fragcolor;   // for gouraud shading
+
+    varying vec3 mvVertex; // for flat shading
     
-    varying vec3 mvNormal;
-    varying vec3 mvVertex;
+    varying vec3 N; // for phong shading
+    uniform float specular_power;
 
     void main(void) {
-        /* ------ gouraud shading ------ */
-        if(shading_mode[0] == 1.){                     
+        /* gouroud shading */
+        if(shading_mode[0] == 1.){                      
             gl_FragColor = fragcolor;
         }
-        
-        /* ------ phong shading ------ */
-        else if (shading_mode[0] == 2.){                          
-            // ambient
-            float ka = Ka_val; 
-            vec3 ambient = ka * ambient_lightColor * vec3(fragcolor);
-            vec3 phong = ambient;
+
+        if (shading_mode[0] == 2.) {
+            /* required variable 
+            -lightColors
+            -lightLocatuons
+            -Ka_val
+            -lightKdKsCDs
+            -mvVertex
+            -N
+            */
+            /* ambient */
+            vec3 ambient_color = Ka_val * ambient_lightColor;
             
-            vec3 eyedir = normalize(-mvVertex); // for specular
-            for(int i=0 ; i<3 ; ++i){
-                float kd = lightKdKsCDs[i][0];
-                float ks = lightKdKsCDs[i][1];
-                float CosineDegree = lightKdKsCDs[i][2];
+            /* diffuse */
+            vec3 lightDirection1 = normalize(lightLocations[0] - mvVertex);
+            float diffuse_cos1 = max(dot(N, lightDirection1),0.0);
+            vec3 diffuse_color = lightColors[0] * lightKdKsCDs[0][0] * vec3(fragcolor) * diffuse_cos1;
+            
+            vec3 lightDirection2 = normalize(lightLocations[1] - mvVertex);
+            float diffuse_cos2 = max(dot(N, lightDirection2),0.0);
+            vec3 diffuse_color2 = lightColors[1] * lightKdKsCDs[1][0] * vec3(fragcolor) * diffuse_cos2;
+            
+            vec3 lightDirection3 = normalize(lightLocations[2] - mvVertex);
+            float diffuse_cos3 = max(dot(N, lightDirection3),0.0);
+            vec3 diffuse_color3 = lightColors[2] * lightKdKsCDs[2][0] * vec3(fragcolor) * diffuse_cos3;
+            
+            /* specular */
+            vec3 eyeDirection = normalize(-mvVertex);
 
-                // diffuse
-                vec3 lightdir = normalize(lightLocations[i] - mvVertex);
-                //float diffuse_cos = max(dot(mvNormal, lightdir), 0.);
-                float diffuse_cos = 0.5;
-                vec3 diffuse_color = lightColors[i] * kd * vec3(fragcolor) * diffuse_cos;
-                //vec3 diffuse_color = 1.0 * kd * vec3(fragcolor) * diffuse_cos;
-                phong += diffuse_color;
-
-                // specular
-                vec3 reflectiondir = reflect(-lightdir, mvNormal);
-                float specular_cos_n = pow(max(dot(reflectiondir, eyedir), 0.), CosineDegree);
-                //float specular_cos_n = 0.5;
-                vec3 specular_color = ks * lightColors[i] * specular_cos_n;
-                phong += specular_color;
-
-            }
-            gl_FragColor = vec4(phong, 1.0);
+            vec3 reflectionDirection1 = reflect(-lightDirection1, N);
+            float specular_cos_n1 = pow(max(dot(reflectionDirection1,eyeDirection), 0.0), specular_power);
+            vec3 specular_color = lightKdKsCDs[0][1] * lightColors[0] * specular_cos_n1;
+            
+            vec3 reflectionDirection2 = reflect(-lightDirection2, N);
+            float specular_cos_n2 = pow(max(dot(reflectionDirection2,eyeDirection), 0.0), specular_power);
+            vec3 specular_color2 = lightKdKsCDs[1][1] * lightColors[1] * specular_cos_n2;
+            
+            vec3 reflectionDirection3 = reflect(-lightDirection3, N);
+            float specular_cos_n3 = pow(max(dot(reflectionDirection3,eyeDirection), 0.0), specular_power);
+            vec3 specular_color3 = lightKdKsCDs[2][1] * lightColors[2] * specular_cos_n3;
+            
+            vec3 flat_shading = ambient_color + diffuse_color + specular_color + diffuse_color2 + specular_color2 + diffuse_color3 + specular_color3;
+            //vec3 flat_shading = ambient_color + specular_color2 + diffuse_color3 + specular_color3;
+            // vec3 flat_shading = ambient_color + diffuse_color + specular_color + diffuse_color2;
+            gl_FragColor = vec4(flat_shading, 1.0);
         }
-        
-        
-        /* ------ flat shading ------ */
-        else if (shading_mode[0] == 3.){              
-            // ambient
-            float ka = Ka_val; 
-            vec3 ambient = ka * ambient_lightColor * vec3(fragcolor);
-            vec3 flat_shading = ambient;
 
+
+        /* flat shading */
+        if(shading_mode[0] == 3.) {
+            /* required variable 
+            -lightColors
+            -lightLocatuons
+            -Ka_val
+            -lightKdKsCDs
+            -mvVertex
+            */
+            /* ambient */
+            vec3 ambient_color = Ka_val * ambient_lightColor;
             vec3 dx = dFdx(mvVertex);
             vec3 dy = dFdy(mvVertex);
             vec3 normal = normalize(cross(dx,dy));
+            
+            /* diffuse */
+            vec3 lightDirection1 = normalize(lightLocations[0] - mvVertex);
+            float diffuse_cos1 = max(dot(normal, lightDirection1),0.0);
+            vec3 diffuse_color = lightColors[0] * lightKdKsCDs[0][0] * vec3(fragcolor) * diffuse_cos1;
+            
+            vec3 lightDirection2 = normalize(lightLocations[1] - mvVertex);
+            float diffuse_cos2 = max(dot(normal, lightDirection2),0.0);
+            vec3 diffuse_color2 = lightColors[1] * lightKdKsCDs[1][0] * vec3(fragcolor) * diffuse_cos2;
+            
+            vec3 lightDirection3 = normalize(lightLocations[2] - mvVertex);
+            float diffuse_cos3 = max(dot(normal, lightDirection3),0.0);
+            vec3 diffuse_color3 = lightColors[2] * lightKdKsCDs[2][0] * vec3(fragcolor) * diffuse_cos3;
+            
+            /* specular */
+            vec3 eyeDirection = normalize(-mvVertex);
 
-            vec3 eyedir = normalize(-mvVertex); // for specular
-            for(int i=0 ; i<3 ; ++i){
-                float kd = lightKdKsCDs[i][0];
-                float ks = lightKdKsCDs[i][1];
-                float CosineDegree = lightKdKsCDs[i][2];
-
-                // diffuse
-                vec3 lightdir = normalize(lightLocations[i] - mvVertex);
-                float diffuse_cos = max(dot(normal, lightdir), 0.);
-                vec3 diffuse_color = lightColors[i] * kd * vec3(fragcolor) * diffuse_cos;
-                flat_shading += diffuse_color;
-
-                // specular 
-                vec3 reflectiondir = reflect(-lightdir, normal);
-                float specular_cos_n = pow(max(dot(reflectiondir, eyedir), 0.), CosineDegree);
-                vec3 specular_color = ks * lightColors[i] * specular_cos_n;
-                flat_shading += specular_color;
-
-            }
+            vec3 reflectionDirection1 = reflect(-lightDirection1, normal);
+            float specular_cos_n1 = pow(max(dot(reflectionDirection1,eyeDirection), 0.0), 1.0);
+            vec3 specular_color = lightKdKsCDs[0][1] * lightColors[0] * specular_cos_n1;
+            
+            vec3 reflectionDirection2 = reflect(-lightDirection2, normal);
+            float specular_cos_n2 = pow(max(dot(reflectionDirection2,eyeDirection), 0.0), 1.0);
+            vec3 specular_color2 = lightKdKsCDs[1][1] * lightColors[1] * specular_cos_n2;
+            
+            vec3 reflectionDirection3 = reflect(-lightDirection3, normal);
+            float specular_cos_n3 = pow(max(dot(reflectionDirection3,eyeDirection), 0.0), 1.0);
+            vec3 specular_color3 = lightKdKsCDs[2][1] * lightColors[2] * specular_cos_n3;
+            
+            vec3 flat_shading = ambient_color + diffuse_color + specular_color + diffuse_color2 + specular_color2 + diffuse_color3 + specular_color3;
+            //vec3 flat_shading = ambient_color + specular_color2 + diffuse_color3 + specular_color3;
+            // vec3 flat_shading = ambient_color + diffuse_color + specular_color + diffuse_color2;
             gl_FragColor = vec4(flat_shading, 1.0);
         }
-        
+
     }
 </script>
 
@@ -128,7 +150,7 @@ bonus to do
     only Teapot.json has extra attribute "vertexTextureCoords"
     which is used for texture mappping.
  -->
-<script id="vertexShader" type="x-shader/x-vertex">    
+<script id="vertexShader" type="x-shader/x-vertex">
     attribute vec3 aVertexPosition;
     attribute vec3 aFrontColor;
     attribute vec3 aVertexNormal;
@@ -155,15 +177,13 @@ bonus to do
     varying vec3 ambient_lightColor;
 
     varying vec4 fragcolor;
-
     varying vec3 mvVertex;
-    varying vec3 mvNormal;
+
+    varying vec3 N;
 
     void main(void) {
         Ka_val = Ka;
-        ambient_lightColor = ambient_color; // = Ia * Obj(r,g,b) = Ia * aFrontColor
-        
-        /* these are for fragment shaders */
+        ambient_lightColor = ambient_color;
         for(int i=0; i<3 ; ++i){
             lightLocations[i] = lightLoc[i];
             lightColors[i] = lightColor[i];
@@ -177,9 +197,12 @@ bonus to do
         vertex_copy.y *= 1.+volume;
         vertex_copy.z *= 1.+volume;
 
-        if(mode == 1){  // gouraud   
-            vec3 gouraud = vec3(0., 0., 0.);
-            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+        /* gouroud */
+        if(mode == 1){    
+            vec3 phong = vec3(0., 0., 0.);
+
+            mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+
             vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
 
             float ka = Ka; 
@@ -189,6 +212,7 @@ bonus to do
 
             for(int i=0 ; i<3 ; ++i){
                 float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
+                //CosineDegree = specular_power;
 
                 vec3 L = normalize(lightLoc[i] - mvVertex);
                 vec3 H = normalize(L+V);
@@ -198,54 +222,33 @@ bonus to do
     
                 vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
                 vec3 specular = ks * Is;
-
-                gouraud += aFrontColor * (ambient + diffuse) + specular;
+    
+                if(dot(L, N) < 0.){
+                    specular = vec3(0., 0., 0.);
+                }
+                phong += aFrontColor * (ambient + diffuse) + specular;
 
             }
-            fragcolor = vec4(gouraud, 1.0);
+            fragcolor = vec4(phong, 1.0);
         }
+        
+        
 
-        if(mode == 2) { // phong
-            //vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
-            vec3 mvNormal = normalize(mat3(uMVMatrix) * aVertexNormal);
-            //fragcolor = vec4(aFrontColor, 1.0);
-
-            vec3 gouraud = vec3(0., 0., 0.);
-            vec3 mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
-            //vec3 mvNormal = mat3(uMVMatrix) * aVertexNormal;
+        /* phong */
+        if (mode == 2) {
+            /* required variable
             
-            //fragcolor = vec4(aFrontColor.rgb, 1.0);
-            ///*
-            float ka = Ka; 
-            vec3 V = -normalize(mvVertex);
-            vec3 N = normalize(mvNormal);
-            vec3 ambient = ka * ambient_color;
-
-            for(int i=0 ; i<3 ; ++i){
-                float kd = lightKdKsCD[i][0], ks = lightKdKsCD[i][1], CosineDegree = lightKdKsCD[i][2];
-
-                vec3 L = normalize(lightLoc[i] - mvVertex);
-                vec3 H = normalize(L+V);
-
-                vec3 Id = lightColor[i] * max(dot(L, N), 0.);
-                vec3 diffuse = kd * Id;
-    
-                vec3 Is = lightColor[i] * pow(max(dot(H, N), 0.), CosineDegree);
-                vec3 specular = ks * Is;
-
-                gouraud += aFrontColor * (ambient + diffuse) + specular;
-
-            }
-            fragcolor = vec4(gouraud, 1.0);
-            //*/
-
+            */
+            mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            N = normalize(mat3(uMVMatrix) * aVertexNormal);
+            fragcolor = vec4(aFrontColor, 1.0);
         }
 
-        if(mode == 3) {  // flat   
-            vec3 mvVertex = (uMVMatrix * vec4(aVertexPosition,1.0)).xyz;
-            fragcolor = vec4(aFrontColor.rgb, 1.0);
+        /* flat */
+        if (mode == 3) {
+            mvVertex = (uMVMatrix * vec4(vertex_copy, 1.0)).xyz;
+            fragcolor = vec4(aFrontColor, 1.0);
         }
-
 
         gl_Position = uPMatrix * uMVMatrix * vec4(vertex_copy, 1.0);
     }
@@ -260,36 +263,29 @@ bonus to do
     var analyser;
     var frequencyData = new Uint8Array();
     // rendering method
-    var mode = 1; // 1: gouraud, 2: phong, 3: flat
+    var mode = 1; // 1: gouroud; 2: phong; 3: flat
     // modeling and perspective matrixs
     var mvMatrix = mat4.create();
     var pMatrix  = mat4.create();
     // object parameters
     var obj_names = ["Teapot.json"];
-    // var obj_names = ["./model/Teapot.json"];
+    // var obj_names = ["Csie.json"];
     var obj_vec = [];
     var obj_default_trans = [vec3.create([0., 0., -15.]), vec3.create([15., 0., -37.]),  vec3.create([-15., -1., -37.])];
     var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-90., 0., -50.]), vec3.create([-90., 0., -50.])];
     var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([2., 2., 2.]), vec3.create([5., 5., 5.])];
     var obj_default_shear = vec3.create([90., 90., 90.]);
     // light parameters
-    /*
-    there are 3 lights, where the parameter are given as 3 sets.
-    */
     var light_locations = new Float32Array([0., 5., -10., // [x,y,z]
                                             17., 5., -17., 
-                                            -17., 5., -17.]);
-    /*                                            
-    var light_colors = new Float32Array([1., 0.0, 0.0,  // [r,g,b]
-                                         0., 1., 0., 
-                                         0., 0., 1.]) 
-    */                                         
-    var light_colors = new Float32Array([0., 1., 0.,  // [r,g,b]
+                                            -17., 5., -17.]);                                        
+    var light_colors = new Float32Array([0., 0., 1.,  // [r,g,b]
                                          1., 1., 1., 
-                                         0., 0., 1.])                                          
-    var light_kdkscd = new Float32Array([0.6, 0.5, 20.0, // [kd,ks,cosineDegree]
-                                         0.6, 0.5, 20.0, 
-                                         0.6, 0.5, 20.0]); 
+                                         1., 1., 1.])                                          
+    var light_kdkscd = new Float32Array([0.5, 0.5, 20.0, // [kd,ks,cosineDegree]
+                                         0.5, 0.5, 20.0, 
+                                         0.5, 0.5, 20.0]);
+    var specular_power = 20.;
     var ka = 0.1;
     var ambiet_light_color = vec3.create([1., 1., 1.]);
     // animation controls
@@ -297,7 +293,8 @@ bonus to do
     var lastTime = 0;
     var random_light_flag = false;
     var transparent = 1.0;
-
+    var volume = 0.;
+    var clipping_plane = -10.;
 
     //*************************************************
     // Initialization functions
@@ -358,8 +355,6 @@ bonus to do
     function initShaders() {
         var fragmentShader = getShader(gl, "fragmentShader");
         var vertexShader   = getShader(gl, "vertexShader");
-        // var fragmentShader = getShader(gl, "x-shader/x-fragment");
-        // var vertexShader   = getShader(gl, "x-shader/x-vertex");
 
         shaderProgram = gl.createProgram();
         gl.attachShader(shaderProgram, vertexShader);
@@ -386,6 +381,7 @@ bonus to do
         gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightLoc"), light_locations);
         gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightColor"), light_colors);
         gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightKdKsCD"), light_kdkscd);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "specular_power"), specular_power);
         gl.uniform1f(gl.getUniformLocation(shaderProgram, "Ka"), ka);
         gl.uniform3fv(gl.getUniformLocation(shaderProgram, "ambient_color"), ambiet_light_color);
         
@@ -410,7 +406,7 @@ bonus to do
         };
         
         audio.play();
-        gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), 0.);
+        gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), volume);
     }
 
     function setMatrixUniforms(obj) {
@@ -447,7 +443,39 @@ bonus to do
         request.open("GET", "./model/"+obj.name);
         request.onreadystatechange = function () {
             if (request.readyState == 4) {
-                handleLoaded(obj, JSON.parse(request.responseText));
+                // handleLoaded(obj, JSON.parse(request.responseText));
+                let jsonObj = JSON.parse(request.responseText);
+                let vertexPositions = jsonObj.vertexPositions;
+                let vertexBackcolors = jsonObj.vertexBackcolors;
+                let vertexFrontcolors = jsonObj.vertexFrontcolors;
+                let vertexNormals = jsonObj.vertexNormals;
+
+                for (let i = 1; i < vertexPositions.length; i += 3) {
+                    if (vertexPositions[i] < clipping_plane) {
+                        vertexPositions[i - 1] = 0;
+                        vertexPositions[i] = 0;
+                        vertexPositions[i + 1] = 0;
+                        
+                        vertexBackcolors[i - 1] = 0;
+                        vertexBackcolors[i] = 0;
+                        vertexBackcolors[i + 1] = 0;
+
+                        vertexFrontcolors[i - 1] = 0;
+                        vertexFrontcolors[i] = 0;
+                        vertexFrontcolors[i + 1] = 0;
+
+                        vertexNormals[i - 1] = 0;
+                        vertexNormals[i] = 0;
+                        vertexNormals[i + 1] = 0;
+                    }
+                }
+                jsonObj.vertexPositions = vertexPositions
+                jsonObj.vertexBackcolors = vertexBackcolors
+                jsonObj.vertexFrontcolors = vertexFrontcolors
+                jsonObj.vertexNormals = vertexNormals
+
+                handleLoaded(obj, jsonObj);
+                console.log(jsonObj);
             }
         }
         request.send();
@@ -490,10 +518,13 @@ bonus to do
             gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightLoc"), light_locations);
             gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightColor"), light_colors);
             gl.uniform3fv(gl.getUniformLocation(shaderProgram, "lightKdKsCD"), light_kdkscd);
+            gl.uniform1f(gl.getUniformLocation(shaderProgram, "specular_power"), specular_power);
+            
             gl.uniform1f(gl.getUniformLocation(shaderProgram, "Ka"), ka);
             gl.uniform3fv(gl.getUniformLocation(shaderProgram, "ambient_color"), ambiet_light_color);
 
-            gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), frequencyData[Math.floor(256 / 7) * i] / 625 );
+            // gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), frequencyData[Math.floor(256 / 7) * i] / 625 );
+            gl.uniform1f( gl.getUniformLocation(shaderProgram, "volume"), (frequencyData[Math.floor(256 / 7) * i] / 625) + volume);
             gl.drawArrays(gl.TRIANGLES, 0, obj_vec[i].VertexPositionBuffer.numItems);
         }
     }
@@ -519,7 +550,6 @@ bonus to do
         initGL(canvas);
         initShaders();
 
-        // modify to 1 object only
         for(var i=0 ; i<3 ; i+=1){
             obj_vec.push( new CGObject(i, obj_names[i], obj_default_trans[i], obj_default_rotate[i], obj_default_scale[i], obj_default_shear) );
             loadObj(obj_vec[i]);
@@ -534,8 +564,9 @@ bonus to do
     //*************************************************
     // Parsing parameters
     //*************************************************
-    function update_mode(){
-        mode = parseInt(document.querySelector('input[name="shadingS"]:checked').value);
+    function update_mode(e){
+        // mode = parseInt(document.querySelector('input[name="shadingS"]:checked').value);
+        mode = e.value;
         gl.uniform1i(gl.getUniformLocation(shaderProgram, "mode"), mode);
     }
 
@@ -546,6 +577,13 @@ bonus to do
             ambiet_light_color[0] = document.getElementById("am_lR").value;
             ambiet_light_color[1] = document.getElementById("am_lG").value;
             ambiet_light_color[2] = document.getElementById("am_lB").value;
+        }
+    }
+
+    function update_specular_power(paramid){
+        if(paramid == 0) {
+            specular_power = document.getElementById("specular_power").value;
+            document.getElementById("specular_power_text").innerText = specular_power;
         }
     }
 
@@ -562,10 +600,16 @@ bonus to do
     }
     
     function update_trans(objid){
-        var tx = document.getElementById(objid + "_transX").value;
-        var ty = document.getElementById(objid + "_transY").value;
-        var tz = document.getElementById(objid + "_transZ").value;
-        obj_vec[objid].translation_vec = vec3.create([tx, ty, tz]);
+        var ori_x = 0.;
+        var ori_y = 0;
+        var ori_z = -15.;
+        var sensitivity = document.getElementById(objid + "_trans_sensitivity").value;
+        var tx = document.getElementById(objid + "_transX").value * sensitivity;
+        var ty = document.getElementById(objid + "_transY").value * sensitivity;
+        var tz = document.getElementById(objid + "_transZ").value * sensitivity;
+        obj_vec[objid].translation_vec = vec3.create([ori_x + tx, 
+                                                      ori_y + ty, 
+                                                      ori_z + tz]);
     }
 
     function update_rotate(objid){
@@ -573,6 +617,17 @@ bonus to do
         var ry = document.getElementById(objid + "_rotateY").value;
         var rz = document.getElementById(objid + "_rotateZ").value;
         obj_vec[objid].rotate_vec = vec3.create([rx, ry, rz]);
+    }
+
+    function update_scale(objid){
+        volume = document.getElementById("0_scaleX").value;
+        // console.log(volume)
+    }
+
+    function update_clipping_plane(objid){
+        clipping_plane = document.getElementById("clipping_plane").value;
+        // console.log(clipping_plane);
+        webGLStart();
     }
     
 </script>
@@ -587,17 +642,15 @@ bonus to do
 
     <p style="position: absolute; left: 1%; top: 1%; max-width: 30%; min-width: 30%; ">
 
-
         <form action="#n">
             <label for="shading">Shading mode: </label> <br>
 
-            <input type="radio" name="shadingS" value="1" checked> Gouraud <br>
+            <input type="radio" name="shadingS" value="1" onClick="update_mode(this)" checked> Gouraud <br>
 
-            <input type="radio" name="shadingS" value="2"> Phone <br>
+            <input type="radio" name="shadingS" onClick="update_mode(this)" value="2"> Phong <br>
 
-            <input type="radio" name="shadingS" value="3"> Flat <br>
+            <input type="radio" name="shadingS" onClick="update_mode(this)" value="3"> Flat <br>
 
-            <a href="javascript: update_mode()">Apply</A>
         </form>
 
         </br>
@@ -607,6 +660,16 @@ bonus to do
                 <td>Ka: <input style="max-width: 70%; vertical-align: middle;" id="am_ka" type="range" autocomplete="off" value="0.1" max="1." min="0." step="0.05" oninput="update_ambient_light(0)"></td>
             </tr>
         </table>
+        <br>
+
+        <span>Specular Reflection: Power of Cosine alpha</span>
+        <table>
+            <tr>
+                <td>power: <input style="max-width: 70%; vertical-align: middle;" id="specular_power" type="range" autocomplete="off" value="20." max="100." min="0.1" step="0.1" oninput="update_specular_power(0)"></td>
+                <td id="specular_power_text">20</td>
+            </tr>
+        </table>
+
         </br>
         <span>Light 0</span>
         <table>
@@ -627,18 +690,33 @@ bonus to do
             <th>X axis</th>
             <th>Y axis</th>
             <th>Z axis</th>
+            <th>sensitivity</th>
             </tr>
             <tr>
                 <td>Trans.</td>
                 <td><input id="0_transX" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
                 <td><input id="0_transY" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
-                <td><input id="0_transZ" type="range" autocomplete="off" value="-15." max="0." min="-120." oninput="update_trans(0)"></td>
+                <td><input id="0_transZ" type="range" autocomplete="off" value="0." max="15.." min="-120." oninput="update_trans(0)"></td>
+                <td><input id="0_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(0)"></td>
             </tr>
             <tr>
                 <td>Rotate</td>
                 <td><input id="0_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
                 <td><input id="0_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
                 <td><input id="0_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+            </tr>
+            <tr>
+                <td>Scaling</td>
+                <td><input id="0_scaleX" type="range" autocomplete="off" value="0." max="1.25" min="0." step="0.25" oninput="update_scale(0)"></td>
+            </tr>
+        </table>
+
+        <br>
+        <span>Clipping</span>
+        <table>
+            <tr>
+                <td>y-axis</td>
+                <td><input id="clipping_plane" type="range" autocomplete="off" value="-10." max="10." min="-10." step="0.1" oninput="update_clipping_plane(0)"></td>
             </tr>
         </table>
     </p>
