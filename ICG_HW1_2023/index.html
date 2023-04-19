@@ -272,11 +272,11 @@
     var obj_vec = [];
 
     /* Translation */
-    var obj_default_trans = [vec3.create([-7, 0., -15.]), vec3.create([-0.1, -0.05, -1.]),  vec3.create([0.35, 0.1, -0.7])]; 
+    var obj_default_trans = [vec3.create([-8, 0., -15.]), vec3.create([-0.2, -0.05, -1.]),  vec3.create([0.22, 0.08, -0.7])]; 
     /* Translation */
-    var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-70, 0., -0.]), vec3.create([-90., 0., -50.])]; 
+    var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-75, 0., -0.]), vec3.create([-90., 0., -50.])]; 
     /* Scale */
-    var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([0.4, 0.4, 0.4]), vec3.create([0.2, 0.2, 0.2])];
+    var obj_default_scale = [vec3.create([0.15, 0.15, 0.15]), vec3.create([0.28, 0.28, 0.28]), vec3.create([0.13, 0.13, 0.13])];
 
     var obj_default_shear = vec3.create([90., 90., 90.]);
 
@@ -287,9 +287,9 @@
     var light_colors = new Float32Array([0., 0., 1.,  // blue
                                          1., 0., 0.,  // red
                                          1., 1., 1.])                                          
-    var light_kdkscd = new Float32Array([0.5, 0.5, 20.0, // [kd,ks,cosineDegree]
-                                         0.5, 0.5, 20.0, 
-                                         0.5, 0.5, 20.0]);
+    var light_kdkscd = new Float32Array([0.6, 0.5, 20.0, // [kd,ks,cosineDegree]
+                                         0.6, 0.5, 20.0, 
+                                         0.6, 0.5, 20.0]);
     var specular_power = 10.;
     var ka = 0.1;
     var ambiet_light_color = vec3.create([1., 1., 1.]);
@@ -567,6 +567,14 @@
         gl.enable(gl.DEPTH_TEST);
 
         tick();
+
+        var body_height = document.body.clientHeight;
+        var body_width = document.body.clientWidth;
+        console.log(body_height);
+        console.log(body_width);
+        // var html_body = document.getElementById("html-body");
+        // html_body
+        canvas.width = body_width*0.7;
     }
 
     //*************************************************
@@ -658,10 +666,10 @@
 </script>
 </head>
 
-<body onload="webGLStart();">
+<body onload="webGLStart();" id="html-body">
     <audio style="position: absolute; right: 4%; bottom: 30%; z-index: 2;" id="myAudio"></audio>
 
-    <div style="position: absolute; left: 1%; top:1%; "></p>
+    <div style="position: absolute; left: 1%; top:1%;"></p>
         <canvas id="ICG-canvas" style="border: none;" width="1300" height="600" ></canvas>
     </div>
 
@@ -838,7 +846,7 @@
                 </tr>
                 <tr>
                     <td>Translation Sensitivity</td>
-                    <td><input id="2_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(2)"></td>
+                    <td><input id="2_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.05" step="0.05" oninput="update_trans(2)"></td>
                 </tr>
                 <tr>
                     <td>Rotate</td>
