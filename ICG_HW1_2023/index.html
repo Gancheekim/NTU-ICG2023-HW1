@@ -267,28 +267,34 @@
     // modeling and perspective matrixs
     var mvMatrix = mat4.create();
     var pMatrix  = mat4.create();
-    // object parameters
-    var obj_names = ["Teapot.json"];
-    // var obj_names = ["Csie.json"];
+    var obj_names = ["Teapot.json", "Csie.json", "Kangaroo.json"];
+    
     var obj_vec = [];
-    var obj_default_trans = [vec3.create([0., 0., -15.]), vec3.create([15., 0., -37.]),  vec3.create([-15., -1., -37.])];
-    var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-90., 0., -50.]), vec3.create([-90., 0., -50.])];
-    var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([2., 2., 2.]), vec3.create([5., 5., 5.])];
+
+    /* Translation */
+    var obj_default_trans = [vec3.create([-7, 0., -15.]), vec3.create([-0.1, -0.05, -1.]),  vec3.create([0.35, 0.1, -0.7])]; 
+    /* Translation */
+    var obj_default_rotate = [vec3.create([0., 0., -0.]), vec3.create([-70, 0., -0.]), vec3.create([-90., 0., -50.])]; 
+    /* Scale */
+    var obj_default_scale = [vec3.create([0.2, 0.2, 0.2]), vec3.create([0.4, 0.4, 0.4]), vec3.create([0.2, 0.2, 0.2])];
+
     var obj_default_shear = vec3.create([90., 90., 90.]);
-    // light parameters
+
+    /* light parameters */
     var light_locations = new Float32Array([0., 5., -10., // [x,y,z]
                                             17., 5., -17., 
                                             -17., 5., -17.]);                                        
-    var light_colors = new Float32Array([0., 0., 1.,  // [r,g,b]
-                                         1., 1., 1., 
+    var light_colors = new Float32Array([0., 0., 1.,  // blue
+                                         1., 0., 0.,  // red
                                          1., 1., 1.])                                          
     var light_kdkscd = new Float32Array([0.5, 0.5, 20.0, // [kd,ks,cosineDegree]
                                          0.5, 0.5, 20.0, 
                                          0.5, 0.5, 20.0]);
-    var specular_power = 20.;
+    var specular_power = 10.;
     var ka = 0.1;
     var ambiet_light_color = vec3.create([1., 1., 1.]);
-    // animation controls
+
+    /* animation controls */
     var rotate_flag = false;
     var lastTime = 0;
     var random_light_flag = false;
@@ -438,7 +444,7 @@
         obj.VertexFrontColorBuffer.numItems = objData.vertexFrontcolors.length / 3;
     }
 
-    function loadObj(obj) {
+    function loadObj(obj, obj_id) {
         var request = new XMLHttpRequest();
         request.open("GET", "./model/"+obj.name);
         request.onreadystatechange = function () {
@@ -450,7 +456,9 @@
                 let vertexFrontcolors = jsonObj.vertexFrontcolors;
                 let vertexNormals = jsonObj.vertexNormals;
 
-                for (let i = 1; i < vertexPositions.length; i += 3) { // y
+                let clip_dim = 0;
+                clip_dim = (obj_id == 0) ? (clip_dim = 1) : ( (obj_id == 1) ? (clip_dim = 1) : (clip_dim = 2) );
+                for (let i = clip_dim; i < vertexPositions.length; i += 3) { // y
                     if (vertexPositions[i] < clipping_plane) {
                         vertexPositions[i - 1] = 0;
                         vertexPositions[i] = 0;
@@ -475,7 +483,7 @@
                 jsonObj.vertexNormals = vertexNormals
 
                 handleLoaded(obj, jsonObj);
-                console.log(jsonObj);
+                // console.log(jsonObj);
             }
         }
         request.send();
@@ -536,7 +544,7 @@
         analyser.getByteFrequencyData(frequencyData);
         
         if(rotate_flag){
-            rotate_objects();
+            auto_rotate();
         }
 
         if(random_light_flag){
@@ -552,7 +560,7 @@
 
         for(var i=0 ; i<3 ; i+=1){
             obj_vec.push( new CGObject(i, obj_names[i], obj_default_trans[i], obj_default_rotate[i], obj_default_scale[i], obj_default_shear) );
-            loadObj(obj_vec[i]);
+            loadObj(obj_vec[i], i);
         }
 
         gl.clearColor(ka*ambiet_light_color[0], ka*ambiet_light_color[1], ka*ambiet_light_color[2], transparent);
@@ -565,7 +573,6 @@
     // Parsing parameters
     //*************************************************
     function update_mode(e){
-        // mode = parseInt(document.querySelector('input[name="shadingS"]:checked').value);
         mode = e.value;
         gl.uniform1i(gl.getUniformLocation(shaderProgram, "mode"), mode);
     }
@@ -600,9 +607,11 @@
     }
     
     function update_trans(objid){
-        var ori_x = 0.;
-        var ori_y = 0;
-        var ori_z = -15.;
+        default_trans = obj_default_trans[objid];
+        var ori_x = default_trans[0];
+        var ori_y = default_trans[1];
+        var ori_z = default_trans[2];
+
         var sensitivity = document.getElementById(objid + "_trans_sensitivity").value;
         var tx = document.getElementById(objid + "_transX").value * sensitivity;
         var ty = document.getElementById(objid + "_transY").value * sensitivity;
@@ -628,13 +637,22 @@
 
     function update_scale(objid){
         volume = document.getElementById("0_scaleX").value;
-        // console.log(volume)
     }
 
     function update_clipping_plane(objid){
         clipping_plane = document.getElementById("clipping_plane").value;
-        // console.log(clipping_plane);
         webGLStart();
+    }
+
+    function auto_rotate() {
+        obj_vec[0].rotate_vec[2] += 1;
+        obj_vec[1].rotate_vec[0] += 1;
+        obj_vec[2].rotate_vec[2] += 1;
+    }
+
+    function update_auto_rotate(e){
+        console.log(e.value);
+        rotate_flag = (e.value == "true");
     }
     
 </script>
@@ -643,12 +661,11 @@
 <body onload="webGLStart();">
     <audio style="position: absolute; right: 4%; bottom: 30%; z-index: 2;" id="myAudio"></audio>
 
-    <p style="position: absolute; right: 2%; top:6%; ">
-        <canvas id="ICG-canvas" style="border: none;" width="1060" height="590" ></canvas>
-    </p>
+    <div style="position: absolute; left: 1%; top:1%; "></p>
+        <canvas id="ICG-canvas" style="border: none;" width="1300" height="600" ></canvas>
+    </div>
 
-    <p style="position: absolute; left: 1%; top: 1%; max-width: 30%; min-width: 30%; ">
-
+    <div style="position: absolute; right: 2%; top: 3%; max-width: 25%; min-width: 25%; border: 1px solid black; padding: 10px;">
         <form action="#n">
             <label for="shading">Shading mode: </label> <br>
 
@@ -660,7 +677,6 @@
 
         </form>
 
-        </br>
         <span>Ambient Light</span>
         <table>
             <tr>
@@ -672,13 +688,13 @@
         <span>Specular Reflection: Power of Cosine alpha</span>
         <table>
             <tr>
-                <td>power: <input style="max-width: 70%; vertical-align: middle;" id="specular_power" type="range" autocomplete="off" value="20." max="100." min="0.1" step="0.1" oninput="update_specular_power(0)"></td>
-                <td id="specular_power_text">20</td>
+                <td>power: <input style="max-width: 70%; vertical-align: middle;" id="specular_power" type="range" autocomplete="off" value="10." max="100." min="0.1" step="0.1" oninput="update_specular_power(0)"></td>
+                <td id="specular_power_text">10</td>
             </tr>
         </table>
 
         </br>
-        <span>Light 0</span>
+        <span>Light 1 (Blue)</span>
         <table>
             <tr>
                 <td>X: <input style="max-width: 70%; vertical-align: middle;" id="0_llocX" type="range" autocomplete="off" value="0." max="20." min="-20." oninput="update_light_location(0)"></td>
@@ -686,38 +702,27 @@
                 <td>Z: <input style="max-width: 70%; vertical-align: middle;" id="0_llocZ" type="range" autocomplete="off" value="-10." max="0." min="-75." oninput="update_light_location(0)"></td>
             </tr>
         </table>
-        </br>
-        </br>
-        </br>
 
-        <span>Object</span>
+        <span>Light 2 (Red)</span>
         <table>
             <tr>
-            <th></th>
-            <th>X axis</th>
-            <th>Y axis</th>
-            <th>Z axis</th>
-            <th>sensitivity</th>
+                <td>X: <input style="max-width: 70%; vertical-align: middle;" id="1_llocX" type="range" autocomplete="off" value="17." max="20." min="-20." oninput="update_light_location(1)"></td>
+                <td>Y: <input style="max-width: 70%; vertical-align: middle;" id="1_llocY" type="range" autocomplete="off" value="5." max="20." min="-20." oninput="update_light_location(1)"></td>
+                <td>Z: <input style="max-width: 70%; vertical-align: middle;" id="1_llocZ" type="range" autocomplete="off" value="-17." max="0." min="-75." oninput="update_light_location(1)"></td>
             </tr>
+        </table>
+
+        <span>Light 3 (White)</span>
+        <table>
             <tr>
-                <td>Trans.</td>
-                <td><input id="0_transX" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
-                <td><input id="0_transY" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
-                <td><input id="0_transZ" type="range" autocomplete="off" value="0." max="15.." min="-120." oninput="update_trans(0)"></td>
-                <td><input id="0_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(0)"></td>
+                <td>X: <input style="max-width: 70%; vertical-align: middle;" id="2_llocX" type="range" autocomplete="off" value="-17." max="20." min="-20." oninput="update_light_location(2)"></td>
+                <td>Y: <input style="max-width: 70%; vertical-align: middle;" id="2_llocY" type="range" autocomplete="off" value="5." max="20." min="-20." oninput="update_light_location(2)"></td>
+                <td>Z: <input style="max-width: 70%; vertical-align: middle;" id="2_llocZ" type="range" autocomplete="off" value="-17." max="0." min="-75." oninput="update_light_location(2)"></td>
             </tr>
-            <tr>
-                <td>Rotate</td>
-                <td><input id="0_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
-                <td><input id="0_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
-                <td><input id="0_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
-            </tr>
-            <tr>
-                <td>Shearing</td>
-                <td><input id="0_shearX" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
-                <td><input id="0_shearY" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
-                <td><input id="0_shearZ" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
-            </tr>
+        </table>
+        </br>
+        
+        <table>
             <tr>
                 <td>Scaling</td>
                 <td><input id="0_scaleX" type="range" autocomplete="off" value="0." max="1.25" min="0." step="0.25" oninput="update_scale(0)"></td>
@@ -729,9 +734,128 @@
         <table>
             <tr>
                 <td>y-axis</td>
-                <td><input id="clipping_plane" type="range" autocomplete="off" value="-10." max="10." min="-10." step="0.1" oninput="update_clipping_plane(0)"></td>
+                <td><input id="clipping_plane" type="range" autocomplete="off" value="-10." max="10." min="-10." step="0.01" oninput="update_clipping_plane(0)"></td>
             </tr>
         </table>
-    </p>
+
+        <br>
+        <form action="#n">
+            <label for="shading">Auto Rotation: </label> <br>
+
+            <input type="radio" name="shadingS" onClick="update_auto_rotate(this)" value="true"> Yes <br>
+
+            <input type="radio" name="shadingS" onClick="update_auto_rotate(this)" value="false" checked> No
+        </form>
+    </div>
+
+
+    <div style="position: absolute; left: 1%; top: 72%; max-width: 100%; min-width: 100%; ">
+
+        <div style="position: absolute; left: 1%; top: 1%; max-width: 31%; min-width: 31%; border: 1px solid black; padding: 5px;">
+            <span>Object 1</span>
+            <table>
+                <tr>
+                <th></th>
+                <th>X axis</th>
+                <th>Y axis</th>
+                <th>Z axis</th>
+                </tr>
+                <tr>
+                    <td>Trans.</td>
+                    <td><input id="0_transX" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
+                    <td><input id="0_transY" type="range" autocomplete="off" value="0." max="50." min="-50." oninput="update_trans(0)"></td>
+                    <td><input id="0_transZ" type="range" autocomplete="off" value="0." max="15.." min="-120." oninput="update_trans(0)"></td>
+                    
+                </tr>
+                <tr>
+                    <td>Translation Sensitivity</td>
+                    <td><input id="0_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(0)"></td>
+                </tr>
+                <tr>
+                    <td>Rotate</td>
+                    <td><input id="0_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+                    <td><input id="0_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+                    <td><input id="0_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(0)"></td>
+                </tr>
+                <tr>
+                    <td>Shearing</td>
+                    <td><input id="0_shearX" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
+                    <td><input id="0_shearY" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
+                    <td><input id="0_shearZ" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(0)"></td>
+                </tr>
+            </table>
+        </div>
+
+
+        <div style="position: absolute; left: 34%; top: 1%; max-width: 31%; min-width: 31%; border: 1px solid black; padding: 5px;">
+            <span>Object 2</span>
+            <table>
+                <tr>
+                <th></th>
+                <th>X axis</th>
+                <th>Y axis</th>
+                <th>Z axis</th>
+                </tr>
+                <tr>
+                    <td>Trans.</td>
+                    <td><input id="1_transX" type="range" autocomplete="off" value="0." max="50." min="-50." step="0.1" oninput="update_trans(1)"></td>
+                    <td><input id="1_transY" type="range" autocomplete="off" value="0." max="50." min="-50." step="0.1" oninput="update_trans(1)"></td>
+                    <td><input id="1_transZ" type="range" autocomplete="off" value="0." max="15.." min="-120." step="0.1" oninput="update_trans(1)"></td>
+                </tr>
+                <tr>
+                    <td>Translation Sensitivity</td>
+                    <td><input id="1_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(1)"></td>
+                </tr>
+                <tr>
+                    <td>Rotate</td>
+                    <td><input id="1_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(1)"></td>
+                    <td><input id="1_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(1)"></td>
+                    <td><input id="1_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(1)"></td>
+                </tr>
+                <tr>
+                    <td>Shearing</td>
+                    <td><input id="1_shearX" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(1)"></td>
+                    <td><input id="1_shearY" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(1)"></td>
+                    <td><input id="1_shearZ" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(1)"></td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="position: absolute; left: 67%; top: 1%; max-width: 31%; min-width: 31%; border: 1px solid black; padding: 5px;">
+            <span>Object 3</span>
+            <table>
+                <tr>
+                <th></th>
+                <th>X axis</th>
+                <th>Y axis</th>
+                <th>Z axis</th>
+                </tr>
+                <tr>
+                    <td>Trans.</td>
+                    <td><input id="2_transX" type="range" autocomplete="off" value="0." max="50." min="-50." step="0.05" oninput="update_trans(2)"></td>
+                    <td><input id="2_transY" type="range" autocomplete="off" value="0." max="50." min="-50." step="0.05" oninput="update_trans(2)"></td>
+                    <td><input id="2_transZ" type="range" autocomplete="off" value="0." max="15.." min="-120." step="0.05" oninput="update_trans(2)"></td>
+                </tr>
+                <tr>
+                    <td>Translation Sensitivity</td>
+                    <td><input id="2_trans_sensitivity" type="range" autocomplete="off" value="1." max="2.0" min="0.2" step="0.2" oninput="update_trans(2)"></td>
+                </tr>
+                <tr>
+                    <td>Rotate</td>
+                    <td><input id="2_rotateX" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(2)"></td>
+                    <td><input id="2_rotateY" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(2)"></td>
+                    <td><input id="2_rotateZ" type="range" autocomplete="off" value="0." max="180." min="-180." oninput="update_rotate(2)"></td>
+                </tr>
+                <tr>
+                    <td>Shearing</td>
+                    <td><input id="2_shearX" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(2)"></td>
+                    <td><input id="2_shearY" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(2)"></td>
+                    <td><input id="2_shearZ" type="range" autocomplete="off" value="90." max="180." min="0." step="1" oninput="update_shear(2)"></td>
+                </tr>
+
+            </table>
+        </div>
+
+    </div>
 </body>
 </html>
